@@ -375,7 +375,7 @@ def chat_endpoint(
     request: ChatRequest,
     session_id: int | None = None,
     db: Session = Depends(get_db),
-    http_request: Request,
+    http_request: Request = None,
 ):
     # ... (existing chat logic)
     context = APP_STATE.get("current_repo_content", "")
