@@ -1,23 +1,30 @@
-from google import genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
 load_dotenv()
 
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
+GENAI_MODEL = os.getenv("GENAI_MODEL", "gemini-1.5-flash")
 
 # Initialize the GenAI client
-client = None
+model = None
 if GENAI_API_KEY:
-    client = genai.Client(api_key=GENAI_API_KEY)
+    genai.configure(api_key=GENAI_API_KEY)
+    model = genai.GenerativeModel(GENAI_MODEL)
 
-def get_chat_response(message: str, history: list[dict], context: str = "") -> str:
+def get_chat_response(message: str, history: list[dict], context: str = "", repo_url: str | None = None) -> str:
     """
-    Generates a response using Gemini 2.0 Flash with the provided context (code base).
+    Generates a response using Gemini with the provided context (code base).
     Uses a refined system prompt for high-quality, architect-level responses.
     """
-    if not GENAI_API_KEY or not client:
+    if not GENAI_API_KEY or not model:
         return "Error: GENAI_API_KEY not set."
+
+    repo_name = ""
+    if repo_url:
+        repo_name = Path(repo_url).stem.replace(".git", "")
 
     # Construct the system instruction / context
     system_prompt = f"""
@@ -27,6 +34,11 @@ def get_chat_response(message: str, history: list[dict], context: str = "") -> s
     <CODEBASE>
     {context}
     </CODEBASE>
+
+    <REPO_METADATA>
+    Repo Name: {repo_name}
+    Repo URL: {repo_url or ""}
+    </REPO_METADATA>
     
     ## 🧠 COGNITIVE PROCESS (INTERNAL):
     Before answering, you must:
@@ -86,19 +98,23 @@ def get_chat_response(message: str, history: list[dict], context: str = "") -> s
     if history:
         for msg in history:
             role_label = "User" if msg.get("role") == "user" else "Assistant"
-            content = msg.get("parts", [""])[0] 
+            content = ""
+            if msg.get("parts"):
+                part = msg["parts"][0]
+                if isinstance(part, dict):
+                    content = str(part.get("text", ""))
+                else:
+                    content = str(part)
+            elif msg.get("content"):
+                content = str(msg.get("content", ""))
             conversation_text += f"{role_label}: {content}\n"
             
     # Combine system prompt, history, and current message
     full_prompt = f"{system_prompt}\n\nConversation History:\n{conversation_text}\n\nUser Question: {message}"
     
     try:
-        # Use Gemini 2.0 Flash
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=full_prompt
-        )
+        # Use configured Gemini model
+        response = model.generate_content(full_prompt)
         return response.text
     except Exception as e:
         return f"Error communicating with Gemini: {str(e)}"
-
