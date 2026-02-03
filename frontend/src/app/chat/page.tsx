@@ -5,9 +5,10 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import ChatWindow from "@/components/ChatWindow";
 import dynamic from 'next/dynamic'; // For no-ssr graph
-import { ingestRepo, createSession, getSession } from "@/lib/api";
-import { Loader2, AlertCircle, Network, MessageSquare, Code2 } from "lucide-react";
+import { ingestRepoAsync, getIngestStatus, createSession, getSession } from "@/lib/api";
+import { Loader2, AlertCircle, Network, MessageSquare, FolderGit2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 // Dynamically import GraphView with NO SSR to prevent window errors
 const GraphView = dynamic(() => import('@/components/GraphView'), { ssr: false });
@@ -17,6 +18,7 @@ function ChatPageContent() {
     const repoUrl = searchParams.get("repo");
     const docsUrl = searchParams.get("docs");
     const sessionParam = searchParams.get("session");
+    const router = useRouter();
 
     const [status, setStatus] = useState<"loading" | "ready" | "error" | "unauthenticated">("loading");
     const [errorMsg, setErrorMsg] = useState("");
@@ -24,6 +26,7 @@ function ChatPageContent() {
     const [activeTab, setActiveTab] = useState<"chat" | "graph">("chat");
     const [activeRepoUrl, setActiveRepoUrl] = useState<string | null>(repoUrl);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [ingestStep, setIngestStep] = useState("Queued");
 
     useEffect(() => {
         // If session ID is provided directly, we assume it exists and just load it.
@@ -63,9 +66,23 @@ function ChatPageContent() {
                     setSessionId(parseInt(sessionParam));
                 }
 
-                // 3. Ingest
-                await ingestRepo(currentRepoUrl, docsUrl || undefined);
-                setStatus("ready");
+                // 3. Ingest (async)
+                const job = await ingestRepoAsync(currentRepoUrl, docsUrl || undefined);
+                setIngestStep("Cloning repository");
+                const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+                while (true) {
+                    const status = await getIngestStatus(job.job_id);
+                    if (status.status === "completed") {
+                        setIngestStep("Completed");
+                        setStatus("ready");
+                        break;
+                    }
+                    if (status.status === "failed") {
+                        throw new Error(status.message || "Failed to ingest repository.");
+                    }
+                    setIngestStep(status.message || "Indexing repository");
+                    await sleep(1500);
+                }
             } catch (err) {
                 console.error(err);
                 if (err instanceof Error && err.message.includes("401")) {
@@ -100,18 +117,19 @@ function ChatPageContent() {
                             <span className="text-blue-400 font-mono bg-blue-950/50 px-1 py-0.5 rounded">{repoUrl?.split('/').pop()}</span>
                         </p>
                     </div>
-                    <button
+                    <Button
                         onClick={() => window.location.href = 'http://localhost:8000/login'}
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold h-12 rounded-lg transition-all flex items-center justify-center gap-2"
+                        className="w-full h-12"
                     >
                         Sign in with Google
-                    </button>
-                    <button
-                        onClick={() => useRouter().push('/')}
-                        className="text-zinc-500 hover:text-zinc-300 text-sm underline underline-offset-4"
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        onClick={() => router.push('/')}
+                        className="text-zinc-500 hover:text-zinc-300 text-sm"
                     >
                         Go back home
-                    </button>
+                    </Button>
                 </div>
             </div>
         );
@@ -131,7 +149,7 @@ function ChatPageContent() {
                         <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                             Ingesting Repository
                         </h2>
-                        <p className="text-zinc-500 mt-2">Cloning, Packing, and Indexing...</p>
+                        <p className="text-zinc-500 mt-2">{ingestStep}</p>
                     </div>
                 </div>
             </div>
@@ -179,7 +197,16 @@ function ChatPageContent() {
                         </button>
                         <div>
                             <h1 className="text-xl font-bold">Repository Chat</h1>
-                            <p className="text-xs text-zinc-500 truncate max-w-[200px] md:max-w-md">{activeRepoUrl || `Session #${sessionId}`}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-zinc-500 truncate max-w-[200px] md:max-w-md">
+                                    {activeRepoUrl || `Session #${sessionId}`}
+                                </span>
+                                {activeRepoUrl && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-200 border border-zinc-700">
+                                        {activeRepoUrl.split('/').pop()}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -207,7 +234,19 @@ function ChatPageContent() {
 
                     {activeTab === 'graph' && (
                         <div className="h-full animate-in fade-in zoom-in-95 duration-300">
-                            {activeRepoUrl ? <GraphView repoUrl={activeRepoUrl} /> : <div className="text-center text-zinc-500 mt-20">Graph unavailable without Repo URL</div>}
+                            {activeRepoUrl ? (
+                                <GraphView repoUrl={activeRepoUrl} />
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-3">
+                                    <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                                        <FolderGit2 className="w-6 h-6 text-zinc-400" />
+                                    </div>
+                                    <div className="text-sm">Graph unavailable without a repository URL.</div>
+                                    <Button variant="outline" size="sm" onClick={() => router.push('/')}>
+                                        Re-ingest a repo
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

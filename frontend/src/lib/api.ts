@@ -1,10 +1,14 @@
 const API_BASE = 'http://localhost:8000';
 
 export async function getCurrentUser() {
-  const res = await fetch(`${API_BASE}/user/me`, { credentials: 'include' });
-  if (res.status === 401) return null;
-  if (!res.ok) throw new Error('Failed to fetch user');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/user/me`, { credentials: 'include' });
+    if (res.status === 401) return null;
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function ingestRepo(repoUrl: string, docsUrl?: string) {
@@ -17,6 +21,31 @@ export async function ingestRepo(repoUrl: string, docsUrl?: string) {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || 'Ingestion failed');
+  }
+  return res.json();
+}
+
+export async function ingestRepoAsync(repoUrl: string, docsUrl?: string) {
+  const res = await fetch(`${API_BASE}/ingest/async`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo_url: repoUrl, docs_url: docsUrl || null }),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Ingestion failed');
+  }
+  return res.json();
+}
+
+export async function getIngestStatus(jobId: string) {
+  const res = await fetch(`${API_BASE}/ingest/status/${jobId}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to fetch ingestion status');
   }
   return res.json();
 }
