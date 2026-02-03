@@ -1,0 +1,54 @@
+# IDEs
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+
+# Backend
+backend/venv/
+backend/.venv/
+backend/env/
+backend/__pycache__/
+backend/**/*.pyc
+backend/.env
+backend/.env.*
+backend/temp_repos/
+backend/repomix-output.txt
+backend/repomix-output.xml
+backend/*.db
+backend/*.sqlite
+backend/.pytest_cache/
+backend/tests/__pycache__/
+backend/services/__pycache__/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.env
+frontend/.env.*
+frontend/.env.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+frontend/.pnp*
+frontend/.yarn/*
+
+# Large Files & Local Artifacts
+*.log
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+build/
+.cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+.env
+.env.*

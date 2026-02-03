@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+temp_repos/
+repomix-output.txt
+repomix-output.xml
+*.db
+*.sqlite
+.pytest_cache/
