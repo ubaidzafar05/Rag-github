@@ -1,0 +1,22 @@
+[
+  {
+    "id": "architecture-overview",
+    "question": "Provide a high-level architecture summary of this repo.",
+    "expected_citations": []
+  },
+  {
+    "id": "chat-endpoint",
+    "question": "Which file defines the /chat endpoint and what does it do?",
+    "expected_citations": ["backend/main.py"]
+  },
+  {
+    "id": "ingest-flow",
+    "question": "What does the /ingest endpoint do and which services does it call?",
+    "expected_citations": ["backend/main.py", "backend/services/ingestion.py"]
+  },
+  {
+    "id": "retrieval-pipeline",
+    "question": "How are retrieval chunks built and embedded?",
+    "expected_citations": ["backend/services/retrieval.py"]
+  }
+]

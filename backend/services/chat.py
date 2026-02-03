@@ -1,23 +1,37 @@
-from google import genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 import os
+import re
+from pathlib import Path
 
 load_dotenv()
 
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
+GENAI_MODEL = os.getenv("GENAI_MODEL", "gemini-1.5-flash")
 
 # Initialize the GenAI client
-client = None
+model = None
 if GENAI_API_KEY:
-    client = genai.Client(api_key=GENAI_API_KEY)
+    genai.configure(api_key=GENAI_API_KEY)
+    model = genai.GenerativeModel(GENAI_MODEL)
 
-def get_chat_response(message: str, history: list[dict], context: str = "") -> str:
+def get_chat_response(
+    message: str,
+    history: list[dict],
+    context: str = "",
+    repo_url: str | None = None,
+    repo_index: str = "",
+) -> str:
     """
-    Generates a response using Gemini 2.0 Flash with the provided context (code base).
+    Generates a response using Gemini with the provided context (code base).
     Uses a refined system prompt for high-quality, architect-level responses.
     """
-    if not GENAI_API_KEY or not client:
+    if not GENAI_API_KEY or not model:
         return "Error: GENAI_API_KEY not set."
+
+    repo_name = ""
+    if repo_url:
+        repo_name = Path(repo_url).stem.replace(".git", "")
 
     # Construct the system instruction / context
     system_prompt = f"""
@@ -27,6 +41,15 @@ def get_chat_response(message: str, history: list[dict], context: str = "") -> s
     <CODEBASE>
     {context}
     </CODEBASE>
+
+    <REPO_INDEX>
+    {repo_index}
+    </REPO_INDEX>
+
+    <REPO_METADATA>
+    Repo Name: {repo_name}
+    Repo URL: {repo_url or ""}
+    </REPO_METADATA>
     
     ## 🧠 COGNITIVE PROCESS (INTERNAL):
     Before answering, you must:
@@ -42,10 +65,11 @@ def get_chat_response(message: str, history: list[dict], context: str = "") -> s
        - Be opinionated about best practices (e.g., "Ideally, we should move this logic to...").
 
     2. **STRUCTURE**:
-       - **Direct Answer**: Start with a 1-sentence summary of the solution or answer.
-       - **Technical Deep Dive**: Explain *why* this works. Use analogies if helpful.
-       - **Code**: Provide complete, copy-pasteable snippets. Use comments to explain complex lines.
-       - **Caveats/Edge Cases**: Mention security implications, performance tips, or potential bugs.
+       - **Summary**: 1-sentence direct answer.
+       - **Evidence (with citations)**: Bullet points that cite exact files and line ranges from <FILE> snippets using format `path:line-start-line-end`.
+       - **Explanation**: Why this works and how it relates to the repo structure.
+       - **Code (if needed)**: Copy-pasteable snippets with brief comments.
+       - **Caveats/Edge Cases**: Security/performance/bug notes.
 
     3. **FORMATTING**:
        - Use **Bold** for emphasis.
@@ -55,6 +79,7 @@ def get_chat_response(message: str, history: list[dict], context: str = "") -> s
 
     ## 🛑 STRICT RULES:
     - **Context Only**: Answer ONLY based on the provided codebase. If the answer isn't in the code, say "I don't see that in the current files, but generally..."
+    - **Citations are mandatory**: Every factual claim about the repo must include at least one file citation using the `path:line-start-line-end` format, based on <FILE> snippets.
     - **Mermaid Diagrams**:
        - ALWAYS use `graph TD` or `graph LR`.
        - **Node IDs**: MUST be SINGLE_WORD alphanumeric (use `_` for spaces). NO spaces, parens, or brackets in IDs.
@@ -86,19 +111,73 @@ def get_chat_response(message: str, history: list[dict], context: str = "") -> s
     if history:
         for msg in history:
             role_label = "User" if msg.get("role") == "user" else "Assistant"
-            content = msg.get("parts", [""])[0] 
+            content = ""
+            parts = msg.get("parts") or []
+            if parts:
+                normalized_parts = []
+                for part in parts:
+                    if isinstance(part, dict):
+                        normalized_parts.append(str(part.get("text", "")))
+                    else:
+                        normalized_parts.append(str(part))
+                content = " ".join([part for part in normalized_parts if part])
+            elif msg.get("content"):
+                content = str(msg.get("content", ""))
             conversation_text += f"{role_label}: {content}\n"
             
     # Combine system prompt, history, and current message
     full_prompt = f"{system_prompt}\n\nConversation History:\n{conversation_text}\n\nUser Question: {message}"
     
     try:
-        # Use Gemini 2.0 Flash
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=full_prompt
-        )
-        return response.text
+        # Use configured Gemini model
+        response = model.generate_content(full_prompt)
+        return _validate_mermaid(response.text)
     except Exception as e:
         return f"Error communicating with Gemini: {str(e)}"
 
+
+def _validate_mermaid(text: str) -> str:
+    if "```mermaid" not in text:
+        return text
+    blocks = text.split("```mermaid")
+    validated = [blocks[0]]
+    for block in blocks[1:]:
+        mermaid, remainder = block.split("```", 1) if "```" in block else (block, "")
+        if not _mermaid_has_citations(remainder):
+            warning = (
+                "\n\n⚠️ Mermaid diagrams should include citations in the surrounding text "
+                "(e.g., `path:line-start-line-end`).\n"
+            )
+            validated.append(mermaid + warning + "```" + remainder)
+            continue
+        if not _is_mermaid_valid(mermaid):
+            warning = (
+                "\n\n⚠️ Mermaid validation failed. "
+                "Ensure `graph TD`/`graph LR` and node IDs are single-word alphanumeric/underscore.\n"
+            )
+            validated.append(mermaid + warning + "```" + remainder)
+        else:
+            validated.append(mermaid + "```" + remainder)
+    return "```mermaid".join(validated)
+
+
+def _is_mermaid_valid(mermaid: str) -> bool:
+    lines = [line.strip() for line in mermaid.strip().splitlines() if line.strip()]
+    if not lines:
+        return False
+    if not (lines[0].startswith("graph TD") or lines[0].startswith("graph LR")):
+        return False
+    for line in lines[1:]:
+        tokens = [token for token in line.replace("-->", " ").replace("|", " ").split() if token]
+        for token in tokens:
+            if "[" in token:
+                token = token.split("[", 1)[0]
+            if "(" in token:
+                token = token.split("(", 1)[0]
+            if token and not token.replace("_", "").isalnum():
+                return False
+    return True
+
+
+def _mermaid_has_citations(text: str) -> bool:
+    return re.search(r"\b[\w./-]+:\d+-\d+\b", text) is not None

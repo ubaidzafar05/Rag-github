@@ -13,6 +13,7 @@ export default function Home() {
     const [repoUrl, setRepoUrl] = useState("");
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [repoError, setRepoError] = useState<string | null>(null);
     const router = useRouter();
 
     // Check auth on mount
@@ -23,12 +24,24 @@ export default function Home() {
         });
     }, []);
 
+    const isValidRepoUrl = (value: string) => {
+        try {
+            const parsed = new URL(value);
+            return parsed.hostname === "github.com" && parsed.pathname.split("/").filter(Boolean).length >= 2;
+        } catch {
+            return false;
+        }
+    };
+
     const handleStart = () => {
         if (!user) {
             window.location.href = 'http://localhost:8000/login';
             return;
         }
-        if (!repoUrl) return;
+        if (!repoUrl || !isValidRepoUrl(repoUrl)) {
+            setRepoError("Enter a valid GitHub repo URL (e.g., https://github.com/org/repo).");
+            return;
+        }
         const encoded = encodeURIComponent(repoUrl);
         router.push(`/chat?repo=${encoded}`);
     };
@@ -64,10 +77,16 @@ export default function Home() {
                                 <Input
                                     placeholder="https://github.com/username/repo"
                                     value={repoUrl}
-                                    onChange={(e) => setRepoUrl(e.target.value)}
+                                    onChange={(e) => {
+                                        setRepoUrl(e.target.value);
+                                        if (repoError) setRepoError(null);
+                                    }}
                                     className="relative bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-600 h-12 text-lg focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-blue-500"
                                 />
                             </div>
+                            {repoError && (
+                                <p className="text-sm text-red-400">{repoError}</p>
+                            )}
                         </div>
 
                         <Button

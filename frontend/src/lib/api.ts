@@ -21,6 +21,31 @@ export async function ingestRepo(repoUrl: string, docsUrl?: string) {
   return res.json();
 }
 
+export async function ingestRepoAsync(repoUrl: string, docsUrl?: string) {
+  const res = await fetch(`${API_BASE}/ingest/async`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo_url: repoUrl, docs_url: docsUrl || null }),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Ingestion failed');
+  }
+  return res.json();
+}
+
+export async function getIngestStatus(jobId: string) {
+  const res = await fetch(`${API_BASE}/ingest/status/${jobId}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to fetch ingestion status');
+  }
+  return res.json();
+}
+
 export async function createSession(repoUrl: string, name?: string) {
   const res = await fetch(`${API_BASE}/sessions`, {
     method: 'POST',
