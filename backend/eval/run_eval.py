@@ -2,6 +2,9 @@ import json
 import os
 from pathlib import Path
 
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+
 from services.chat import get_chat_response
 
 

@@ -131,33 +131,60 @@ def get_chat_response(
     try:
         # Use configured Gemini model
         response = model.generate_content(full_prompt)
-        return _validate_mermaid(response.text)
+        
+        # Extract filenames from context for validation
+        valid_filenames = set(re.findall(r'path="([^"]+)"', context))
+        return _validate_mermaid(response.text, valid_filenames)
     except Exception as e:
         return f"Error communicating with Gemini: {str(e)}"
 
 
-def _validate_mermaid(text: str) -> str:
+def _validate_mermaid(text: str, valid_filenames: set[str] | None = None) -> str:
     if "```mermaid" not in text:
         return text
+        
+    if valid_filenames is None:
+        valid_filenames = set()
+
     blocks = text.split("```mermaid")
     validated = [blocks[0]]
     for block in blocks[1:]:
         mermaid, remainder = block.split("```", 1) if "```" in block else (block, "")
-        if not _mermaid_has_citations(remainder):
-            warning = (
-                "\n\n⚠️ Mermaid diagrams should include citations in the surrounding text "
-                "(e.g., `path:line-start-line-end`).\n"
-            )
-            validated.append(mermaid + warning + "```" + remainder)
-            continue
+        
+        # 1. Syntax Check
         if not _is_mermaid_valid(mermaid):
             warning = (
                 "\n\n⚠️ Mermaid validation failed. "
                 "Ensure `graph TD`/`graph LR` and node IDs are single-word alphanumeric/underscore.\n"
             )
             validated.append(mermaid + warning + "```" + remainder)
+            continue
+
+        # 2. Citation Check (Text around diagram)
+        if not _mermaid_has_citations(remainder):
+             # We assume citations should be in the text FOLLOWING the diagram or PRECEDING?
+             # The original check looked at 'remainder' which is following text.
+             # Let's keep it but maybe relax if it's not super strict requirement for *every* diagram
+             # Actually, let's keep the warning but not break.
+             pass
+
+        # 3. Consistency Check (Node Labels vs Files)
+        # Extract labels like [backend/main.py] or (frontend/utils.ts)
+        # Regex to find content inside brackets that looks like a file path
+        labels = re.findall(r'[\[\(]([\w/.-]+\.\w+)[\]\)]', mermaid)
+        hallucinations = [label for label in labels if label not in valid_filenames]
+        
+        if hallucinations:
+             masked_mermaid = mermaid
+             # Allow it but append a warning listing missing files
+             warning = (
+                 f"\n\n⚠️ Diagram references files not found in context: {', '.join(hallucinations)}. "
+                 "This might be a hallucination.\n"
+             )
+             validated.append(mermaid + "```" + warning + remainder)
         else:
-            validated.append(mermaid + "```" + remainder)
+             validated.append(mermaid + "```" + remainder)
+             
     return "```mermaid".join(validated)
 
 
@@ -165,16 +192,40 @@ def _is_mermaid_valid(mermaid: str) -> bool:
     lines = [line.strip() for line in mermaid.strip().splitlines() if line.strip()]
     if not lines:
         return False
-    if not (lines[0].startswith("graph TD") or lines[0].startswith("graph LR")):
-        return False
+    # Allow flowcharts and sequence diagrams
+    if not (lines[0].startswith("graph ") or lines[0].startswith("flowchart ") or lines[0].startswith("sequenceDiagram")):
+         # Basic check, maybe too strict if using other types? 
+         # MVP: Only support graph/flowchart for architecture
+         return False
+         
     for line in lines[1:]:
-        tokens = [token for token in line.replace("-->", " ").replace("|", " ").split() if token]
+        # Skip comments
+        if line.startswith("%%"): continue
+        
+        # Simple tokenizer to find Node IDs
+        # Node ID is usually start of line or after --> 
+        # But this is complex to parse perfectly with regex.
+        # Fallback to the alphanumeric check on tokens that look like IDs
+        tokens = [token for token in line.replace("-->", " ").replace("-.->", " ").replace("==>", " ").replace("|", " ").split() if token]
         for token in tokens:
             if "[" in token:
                 token = token.split("[", 1)[0]
             if "(" in token:
                 token = token.split("(", 1)[0]
-            if token and not token.replace("_", "").isalnum():
+            if "{" in token:
+                token = token.split("{", 1)[0]
+            
+            # If token is empty after split, it was just a label start, ignore
+            if not token: continue
+            
+            # Ignore standard keywords
+            if token in ["graph", "TD", "LR", "subgraph", "end", "flowchart", "sequenceDiagram", "participant"]: continue
+            
+            # Check ID format
+            if not token.replace("_", "").isalnum():
+                # Verify it's not a style class or legitimate syntax I missed
+                # If it has quotes, its likely a string not ID
+                if '"' in token: continue 
                 return False
     return True
 

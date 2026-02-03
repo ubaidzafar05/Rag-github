@@ -44,8 +44,19 @@ class RepoIngestion(Base):
     id = Column(Integer, primary_key=True, index=True)
     repo_url = Column(String, unique=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    local_path = Column(String) # Store randomized local path
     repo_index = Column(Text)
     content = Column(Text)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User")
+
+class IngestJob(Base):
+    __tablename__ = "ingest_jobs"
+
+    id = Column(String, primary_key=True, index=True)
+    repo_url = Column(String, index=True)
+    status = Column(String) # queued, running, completed, failed
+    current_step = Column(String)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

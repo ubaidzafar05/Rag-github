@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from './config';
 
 export async function getCurrentUser() {
   try {
@@ -108,11 +108,11 @@ export async function checkHealth() {
   return res.ok;
 }
 
-export async function applyFix(filePath: string, content: string) {
+export async function applyFix(repoUrl: string, filePath: string, content: string) {
   const res = await fetch(`${API_BASE}/apply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_path: filePath, content }),
+    body: JSON.stringify({ repo_url: repoUrl, file_path: filePath, content }),
     credentials: 'include',
   });
   if (!res.ok) {
@@ -121,3 +121,4 @@ export async function applyFix(filePath: string, content: string) {
   }
   return res.json();
 }
+

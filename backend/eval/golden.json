@@ -7,16 +7,79 @@
   {
     "id": "chat-endpoint",
     "question": "Which file defines the /chat endpoint and what does it do?",
-    "expected_citations": ["backend/main.py"]
+    "expected_citations": [
+      "backend/routers/chat.py"
+    ]
   },
   {
     "id": "ingest-flow",
     "question": "What does the /ingest endpoint do and which services does it call?",
-    "expected_citations": ["backend/main.py", "backend/services/ingestion.py"]
+    "expected_citations": [
+      "backend/routers/ingest.py",
+      "backend/services/ingestion.py"
+    ]
   },
   {
     "id": "retrieval-pipeline",
     "question": "How are retrieval chunks built and embedded?",
-    "expected_citations": ["backend/services/retrieval.py"]
+    "expected_citations": [
+      "backend/services/retrieval.py"
+    ]
+  },
+  {
+    "id": "db-models",
+    "question": "What database models are defined?",
+    "expected_citations": [
+      "backend/db_models.py"
+    ]
+  },
+  {
+    "id": "security-check",
+    "question": "Where is the session secret loaded from?",
+    "expected_citations": [
+      "backend/core/config.py"
+    ]
+  },
+  {
+    "id": "debug-error-handling",
+    "question": "How are unhandled exceptions caught in the backend?",
+    "expected_citations": [
+      "backend/main.py"
+    ]
+  },
+  {
+    "id": "refactor-schema",
+    "question": "Where are the Pydantic models for API requests defined?",
+    "expected_citations": [
+      "backend/schemas.py"
+    ]
+  },
+  {
+    "id": "auth-flow",
+    "question": "Which router handles Google OAuth callback?",
+    "expected_citations": [
+      "backend/routers/auth.py"
+    ]
+  },
+  {
+    "id": "editor-endpoints",
+    "question": "Which routers handle applying code patches?",
+    "expected_citations": [
+      "backend/routers/editor.py"
+    ]
+  },
+  {
+    "id": "frontend-config",
+    "question": "Where is the API base URL defined in the frontend?",
+    "expected_citations": [
+      "frontend/src/lib/config.ts"
+    ]
+  },
+  {
+    "id": "session-management",
+    "question": "Which backend router handles session creation?",
+    "expected_citations": [
+      "backend/routers/session.py"
+    ]
   }
 ]
