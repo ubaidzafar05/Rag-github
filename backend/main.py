@@ -375,17 +375,19 @@ def chat_endpoint(
     request: ChatRequest,
     session_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user: dict | None = Depends(get_optional_user_dep),
+    http_request: Request = None,
 ):
     # ... (existing chat logic)
     context = APP_STATE.get("current_repo_content", "")
     repo_index = APP_STATE.get("repo_indexes", {}).get(APP_STATE.get("current_repo_url", ""), "")
     repo_url = APP_STATE.get("current_repo_url")
     repo_path = APP_STATE.get("current_repo")
+    current_user = None
 
     try:
         history = request.history or []
         if session_id:
+            current_user = http_request.session.get("user") if http_request else None
             if not current_user:
                 raise HTTPException(status_code=401, detail="Not authenticated")
             session = (
