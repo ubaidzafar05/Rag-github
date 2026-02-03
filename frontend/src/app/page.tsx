@@ -4,6 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
+
+interface UserType {
+    id: number;
+    name: string;
+    email: string;
+    picture: string;
+}
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Github, ArrowRight, Sparkles } from "lucide-react";
@@ -11,7 +18,7 @@ import { getCurrentUser } from "@/lib/api";
 
 export default function Home() {
     const [repoUrl, setRepoUrl] = useState("");
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<UserType | null>(null);
     const [loading, setLoading] = useState(true);
     const [repoError, setRepoError] = useState<string | null>(null);
     const router = useRouter();
@@ -35,7 +42,7 @@ export default function Home() {
 
     const handleStart = () => {
         if (!user) {
-            window.location.href = 'http://localhost:8000/login';
+            window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/login`;
             return;
         }
         if (!repoUrl || !isValidRepoUrl(repoUrl)) {

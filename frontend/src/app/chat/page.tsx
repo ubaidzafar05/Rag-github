@@ -31,7 +31,6 @@ function ChatPageContent() {
     useEffect(() => {
         // If session ID is provided directly, we assume it exists and just load it.
         if (sessionParam) {
-            // eslint-disable-next-line
             setSessionId(parseInt(sessionParam));
             setStatus("ready");
             return;
@@ -118,7 +117,7 @@ function ChatPageContent() {
                         </p>
                     </div>
                     <Button
-                        onClick={() => window.location.href = 'http://localhost:8000/login'}
+                        onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/login`}
                         className="w-full h-12"
                     >
                         Sign in with Google
@@ -229,7 +228,7 @@ function ChatPageContent() {
                 <div className="flex-1 overflow-hidden p-4 relative">
                     {/* Render both but hide one to preserve state if needed, or simple conditional */}
                     <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
-                        {sessionId && <ChatWindow sessionId={sessionId} />}
+                        {sessionId && activeRepoUrl && <ChatWindow sessionId={sessionId} repoUrl={activeRepoUrl} />}
                     </div>
 
                     {activeTab === 'graph' && (

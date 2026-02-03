@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { MessageSquare, Plus, Trash2, Github, AlertTriangle, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSessions, deleteSession, getCurrentUser } from "@/lib/api";
@@ -37,10 +37,17 @@ interface Session {
     last_message: string;
 }
 
+interface UserType {
+    id: number;
+    name: string;
+    email: string;
+    picture: string;
+}
+
 export default function Sidebar({ currentSessionId }: { currentSessionId?: number }) {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [deleteId, setDeleteId] = useState<number | null>(null);
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<UserType | null>(null);
     const [loading, setLoading] = useState(true);
     const [isNewChatOpen, setIsNewChatOpen] = useState(false);
     const [newRepoUrl, setNewRepoUrl] = useState("");
@@ -53,7 +60,7 @@ export default function Sidebar({ currentSessionId }: { currentSessionId?: numbe
         });
     }, []);
 
-    const loadSessions = async () => {
+    const loadSessions = useCallback(async () => {
         if (!user) return;
         try {
             const data = await getSessions();
@@ -61,13 +68,13 @@ export default function Sidebar({ currentSessionId }: { currentSessionId?: numbe
         } catch (e) {
             console.error("Failed to load sessions", e);
         }
-    };
+    }, [user]);
 
     useEffect(() => {
         if (user) {
             loadSessions();
         }
-    }, [currentSessionId, user]);
+    }, [currentSessionId, user, loadSessions]);
 
     const handleDelete = async () => {
         if (deleteId) {
@@ -106,7 +113,7 @@ export default function Sidebar({ currentSessionId }: { currentSessionId?: numbe
                     </p>
                 </div>
                 <Button
-                    onClick={() => window.location.href = 'http://localhost:8000/login'}
+                    onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/login`}
                     className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium h-10 transition-all"
                 >
                     Login with Google
@@ -211,7 +218,7 @@ export default function Sidebar({ currentSessionId }: { currentSessionId?: numbe
                     <div className="text-xs text-zinc-500 truncate">{user.email}</div>
                 </div>
                 <button
-                    onClick={() => window.location.href = 'http://localhost:8000/logout'}
+                    onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/logout`}
                     className="text-zinc-500 hover:text-red-400 transition-colors p-1"
                     title="Logout"
                 >

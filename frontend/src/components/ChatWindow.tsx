@@ -4,8 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, FileCode, Sparkles, Bug, FileText, Check, X, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import ReactMarkdown from "react-markdown";
 import mermaid from "mermaid";
 import { sendChatMessage, getSessionMessages, applyFix } from "@/lib/api";
@@ -13,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 mermaid.initialize({ startOnLoad: false, theme: 'dark' });
 
-const ApplyBlock = ({ code_block }: { code_block: string }) => {
+const ApplyBlock = ({ code_block, repoUrl }: { code_block: string, repoUrl: string }) => {
     const pathMatch = code_block.match(/<file path="([^"]+)">/);
     const filePath = pathMatch ? pathMatch[1] : "unknown";
     const content = code_block.replace(/<file path="[^"]+">/, "").replace("</file>", "").trim();
@@ -23,9 +22,9 @@ const ApplyBlock = ({ code_block }: { code_block: string }) => {
     const handleApply = async () => {
         setStatus("applying");
         try {
-            await applyFix(filePath, content);
+            await applyFix(repoUrl, filePath, content);
             setStatus("success");
-        } catch (e) {
+        } catch {
             setStatus("error");
         }
     };
@@ -80,7 +79,7 @@ interface Message {
     content: string;
 }
 
-export default function ChatWindow({ sessionId }: { sessionId?: number }) {
+export default function ChatWindow({ sessionId, repoUrl }: { sessionId?: number, repoUrl: string }) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -119,7 +118,7 @@ export default function ChatWindow({ sessionId }: { sessionId?: number }) {
             const response = await sendChatMessage(userMsg.content, history, sessionId);
 
             setMessages(prev => [...prev, { role: "model", content: response.response || response }]);
-        } catch (error) {
+        } catch {
             setMessages(prev => [...prev, { role: "model", content: "Error: Failed to get response." }]);
         } finally {
             setIsLoading(false);
@@ -144,13 +143,13 @@ export default function ChatWindow({ sessionId }: { sessionId?: number }) {
 
         return parts.map((part, i) => {
             if (part.startsWith("<file")) {
-                return <ApplyBlock key={i} code_block={part} />;
+                return <ApplyBlock key={i} code_block={part} repoUrl={repoUrl} />;
             }
             return (
                 <div key={i} className="prose prose-invert prose-sm max-w-none break-words mb-2 last:mb-0">
                     <ReactMarkdown
                         components={{
-                            code({ node, className, children, ...props }) {
+                            code({ className, children, ...props }) {
                                 const match = /language-(\w+)/.exec(className || "");
                                 const isMermaid = match && match[1] === "mermaid";
                                 if (isMermaid) return <MermaidBlock code={String(children).replace(/\n$/, "")} />;

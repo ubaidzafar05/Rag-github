@@ -16,8 +16,6 @@ A premium, intelligent chat application that allows you to converse with any Git
 ### 1. Backend (Python)
 Open a terminal in the root directory:
 
-```bash
-cd backend
 
 # Create virtual env (first time only)
 python -m venv venv
@@ -66,6 +64,18 @@ Visit **http://localhost:3000** to start chatting!
 -   **Knowledge Graph**: Visualize your codebase structure with an interactive node-link graph.
 -   **Agentic "Apply Fix"**: The AI can now propose code changes which you can apply with one click.
 -   **Latest SDK**: Migrated to the latest `google-genai` SDK for better performance and future-proofing.
+
+## 🛠️ Troubleshooting & Recent Fixes
+-   **Git Clone/Locking Issues**: The system handles Windows file locking by automatically cleaning up stuck directories (`_trash`) before cloning.
+-   **Gemini 404/Protocol Errors**: Updated to use `gemini-1.5-pro` (stable) to ensure compatibility.
+-   **Restarting**: If you encounter issues, restart the backend:
+    ```bash
+    uvicorn main:app --reload --port 8000
+    ```
+
+## 📦 Dependencies
+-   **Backend**: Added `google-generativeai` to `requirements.txt` to support the latest Gemini service.
+-   **Frontend**: Cleaned up unused imports and `any` types for better type safety.
 
 ## 🔮 Future Roadmap (Brainstorming)
 Ideas for extending the project:
