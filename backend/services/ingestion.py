@@ -7,6 +7,23 @@ from firecrawl import FirecrawlApp
 
 TEMP_DIR = Path("temp_repos")
 
+def build_repo_index(repo_path: str, max_files: int = 500) -> str:
+    """Builds a lightweight file index for the repo for prompt grounding."""
+    repo_root = Path(repo_path)
+    entries: list[str] = []
+    for root, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = [
+            d for d in dirnames if d not in {".git", "node_modules", "__pycache__"}
+        ]
+        for filename in filenames:
+            if filename in {"repomix-output.txt", "repomix-output.xml"}:
+                continue
+            full_path = Path(root) / filename
+            entries.append(str(full_path.relative_to(repo_root)))
+            if len(entries) >= max_files:
+                return "\n".join(entries)
+    return "\n".join(entries)
+
 def clone_repo(repo_url: str) -> str:
     """Clones a GitHub repository to a temporary directory."""
     repo_name = repo_url.split("/")[-1].replace(".git", "")

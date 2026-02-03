@@ -36,3 +36,16 @@ class ChatMessage(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
     session = relationship("ChatSession", back_populates="messages")
+
+
+class RepoIngestion(Base):
+    __tablename__ = "repo_ingestions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_url = Column(String, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    repo_index = Column(Text)
+    content = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User")
