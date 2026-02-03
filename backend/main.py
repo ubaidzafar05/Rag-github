@@ -12,11 +12,15 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
 from dotenv import load_dotenv
+from pathlib import Path
 import os
 
 # Load Auth Keys from parent directory
 auth_keys_path = "c:/pyPractice/auth-keys/auth_export/keys/.env"
-load_dotenv(auth_keys_path)
+if os.path.exists(auth_keys_path):
+    load_dotenv(auth_keys_path)
+else:
+    load_dotenv()
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -57,7 +61,7 @@ APP_STATE = {
 
 from services.chat import GENAI_API_KEY
 if not GENAI_API_KEY:
-    print("WARNING: GENAI_API_KEY is not set. Chat will not functional.")
+    print("WARNING: GENAI_API_KEY is not set. Chat will not function.")
 
 class IngestRequest(BaseModel):
     repo_url: str
@@ -255,15 +259,37 @@ def get_graph(repo_url: str):
     return build_knowledge_graph(str(target_dir))
 
 @app.post("/chat", response_model=ChatResponse)
-def chat_endpoint(request: ChatRequest, session_id: int | None = None, db: Session = Depends(get_db)):
+def chat_endpoint(
+    request: ChatRequest,
+    session_id: int | None = None,
+    db: Session = Depends(get_db),
+    http_request: Request | None = None,
+):
     # ... (existing chat logic)
     context = APP_STATE.get("current_repo_content", "")
     if not context:
         return ChatResponse(response="Please ingest a repository first.", session_id=session_id or 0)
 
     try:
+        if session_id:
+            current_user = http_request.session.get("user") if http_request else None
+            if not current_user:
+                raise HTTPException(status_code=401, detail="Not authenticated")
+            session = (
+                db.query(ChatSession)
+                .filter(ChatSession.id == session_id, ChatSession.user_id == current_user["id"])
+                .first()
+            )
+            if not session:
+                raise HTTPException(status_code=404, detail="Session not found")
+
         # 3. Call Gemini
-        answer = get_chat_response(request.message, request.history or [], context)
+        answer = get_chat_response(
+            request.message,
+            request.history or [],
+            context,
+            APP_STATE.get("current_repo_url"),
+        )
         
         # 4. Persist if we have a session_id
         if session_id:
