@@ -87,3 +87,50 @@ def build_knowledge_graph(repo_path: str):
                              break
 
     return {"nodes": nodes, "links": links}
+
+
+# Global Cache for Graph (Simple in-memory for now)
+_GRAPH_CACHE = {}
+
+def get_repo_graph(repo_path: str):
+    if repo_path in _GRAPH_CACHE:
+        return _GRAPH_CACHE[repo_path]
+    
+    graph_data = build_knowledge_graph(repo_path)
+    
+    # Convert to adjacency list for fast lookup
+    adj_list = {}
+    node_id_to_index = {}
+    
+    for i, node in enumerate(graph_data["nodes"]):
+        node_id_to_index[node["id"]] = i
+        adj_list[node["id"]] = []
+        
+    for link in graph_data["links"]:
+        source = link["source"]
+        target = link["target"]
+        if source not in adj_list: adj_list[source] = []
+        adj_list[source].append(target)
+        # Undirected graph assumption for context? 
+        # If A imports B, B is relevant to A.
+        # But if A is main.py and imports utils.py, 
+        # when looking at utils.py, main.py is also relevant context (usage examples).
+        if target not in adj_list: adj_list[target] = []
+        adj_list[target].append(source)
+        
+    _GRAPH_CACHE[repo_path] = adj_list
+    return adj_list
+
+def get_related_files(repo_path: str, file_path: str) -> list[str]:
+    """Returns a list of file paths related to the given file based on imports."""
+    graph = get_repo_graph(repo_path)
+    
+    # Normalize file_path relative to repo root if needed
+    # The graph IDs are relative paths like "backend/main.py"
+    # Ensure input matches that format
+    rel_path = file_path.replace("\\", "/")
+    if rel_path.startswith("/"): rel_path = rel_path[1:]
+    
+    neighbors = graph.get(rel_path, [])
+    return list(set(neighbors)) # Dedupe logic
+

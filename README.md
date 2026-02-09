@@ -3,7 +3,7 @@
 A premium, intelligent chat application that allows you to converse with any GitHub repository.
 
 **Powered by:**
--   **Backend**: FastAPI, Repomix (Code Packing), Firecrawl (Docs), **Gemini 2.0 Flash** (LLM).
+-   **Backend**: FastAPI, Repomix (Code Packing), Firecrawl (Docs), **Groq/Llama 3.3** (LLM).
 -   **Frontend**: Next.js 15, TailwindCSS, Shadcn UI, Framer Motion, Mermaid.js.
 
 ## 🚀 How to Run
@@ -11,7 +11,7 @@ A premium, intelligent chat application that allows you to converse with any Git
 ### Prerequisites
 -   Node.js & npm
 -   Python 3.10+
--   Gemini API Key
+-   Groq API Key
 
 ### 1. Backend (Python)
 Open a terminal in the root directory:
@@ -31,10 +31,10 @@ pip install fastapi uvicorn google-genai itsdangerous firecrawl-py python-multip
 # Note: google-genai is the new SDK replacing google-generativeai
 
 # Set API Key (Linux/Mac)
-# export GENAI_API_KEY="your_key_here"
+# export GROQ_API_KEY="your_key_here"
 # Windows (PowerShell)
-# $env:GENAI_API_KEY="your_key_here"
-# OR create a .env file in /backend with GENAI_API_KEY=...
+# $env:GROQ_API_KEY="your_key_here"
+# OR create a .env file in /backend with GROQ_API_KEY=...
 
 # Run Server
 uvicorn main:app --reload --port 8000
@@ -74,8 +74,13 @@ Visit **http://localhost:3000** to start chatting!
     ```
 
 ## 📦 Dependencies
--   **Backend**: Added `google-generativeai` to `requirements.txt` to support the latest Gemini service.
+-   **Backend**: Dropped `google-genai` in favor of `groq` for better stability and speed.
 -   **Frontend**: Cleaned up unused imports and `any` types for better type safety.
+
+## ⚠️ Current Limitations
+-   **API Quotas**: The system relies on Groq's free tier, which has rate limits. High traffic may cause temporary 429 errors.
+-   **Context Caching**: Not supported on Groq, so full repository context is sent with every request (limited by context window).
+-   **Offline Mode**: Currently requires an internet connection correctly as local LLM inference (Ollama) was disabled due to hardware constraints.
 
 ## 🔮 Future Roadmap (Brainstorming)
 Ideas for extending the project:

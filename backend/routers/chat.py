@@ -79,7 +79,7 @@ def chat_endpoint(
                  retrieval_index = build_index(repo_path)
                  save_index(repo_path, retrieval_index, repo_url)
 
-        snippets = retrieve(request.message, retrieval_index) if retrieval_index else []
+        snippets = retrieve(request.message, retrieval_index, max_tokens=100000, repo_path=str(repo_path) if repo_path else None) if retrieval_index else []
         snippet_context = format_chunks(snippets)
         citations = [
             {

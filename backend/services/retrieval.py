@@ -40,6 +40,7 @@ class RetrievalIndex:
 
 
 _MODEL: SentenceTransformer | None = None
+_RANKER = None # Lazy loaded CrossEncoder
 
 
 def _get_model() -> SentenceTransformer:
@@ -83,7 +84,10 @@ def build_chunks(repo_path: str) -> list[Chunk]:
     chunks: list[Chunk] = []
     for path in _iter_files(repo_root):
         try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
+            if path.suffix.lower() == ".pdf":
+                text = _read_pdf(path)
+            else:
+                text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
         lines = text.splitlines(keepends=True)
@@ -104,28 +108,171 @@ def build_index(repo_path: str) -> RetrievalIndex:
     if not chunks:
         return RetrievalIndex(chunks=[], embeddings=np.zeros((0, 0)))
     model = _get_model()
-    embeddings = model.encode([chunk.text for chunk in chunks], normalize_embeddings=True)
+    model = _get_model()
+    # Contextual Embedding: Prepend file path to content for better retrieval
+    embed_texts = [f"File: {chunk.path}\nContent:\n{chunk.text}" for chunk in chunks]
+    embeddings = model.encode(embed_texts, normalize_embeddings=True)
     embeddings = np.asarray(embeddings, dtype="float32")
     return RetrievalIndex(chunks=chunks, embeddings=embeddings)
+
+
+def _read_pdf(path: Path) -> str:
+    try:
+        import pdfplumber
+        text = ""
+        with pdfplumber.open(path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        return text
+    except Exception:
+        return ""
+
+
+
+
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
+
+def _count_tokens(text: str) -> int:
+    if tiktoken:
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+            return len(encoding.encode(text))
+        except Exception:
+            return len(text) // 4
+    return len(text) // 4
 
 
 def retrieve(
     query: str,
     index: RetrievalIndex,
     top_k: int = DEFAULT_TOP_K,
+    max_tokens: int = 100000,
+    repo_path: str | None = None,
 ) -> list[Chunk]:
+
     if not index.chunks or index.embeddings.size == 0:
         return []
     model = _get_model()
     query_embedding = model.encode([query], normalize_embeddings=True).astype("float32")
     collection = _get_collection(index)
+    
+    
+    # 1. Broad Retrieval (Top K * 5)
+    broad_k = top_k * 5
     if collection is not None:
-        results = collection.query(query_embeddings=query_embedding.tolist(), n_results=top_k)
+        results = collection.query(query_embeddings=query_embedding.tolist(), n_results=broad_k)
         top_indices = [int(item) for item in results["ids"][0]]
     else:
         scores = np.dot(index.embeddings, query_embedding[0])
-        top_indices = np.argsort(scores)[::-1][:top_k]
-    return [index.chunks[i] for i in top_indices]
+        top_indices = np.argsort(scores)[::-1][:broad_k]
+    
+    broad_chunks = [index.chunks[i] for i in top_indices]
+    
+    # 2. Re-Ranking (Cross Encoder)
+    # Lazy load ranker to save startup time
+    global _RANKER
+    if _RANKER is None:
+        try:
+           from sentence_transformers import CrossEncoder
+           _RANKER = CrossEncoder('cross-encoder/ms-marco-TinyBERT-L-2-v2') 
+        except Exception as e:
+            print(f"Re-ranker load failed: {e}")
+            _RANKER = None
+
+    if _RANKER:
+        # Create pairs: (query, text)
+        pairs = [[query, chunk.text] for chunk in broad_chunks]
+        scores = _RANKER.predict(pairs)
+        
+        # Sort chunks by cross-encoder score
+        # zip together, sort, unzip
+        scored_chunks = sorted(zip(broad_chunks, scores), key=lambda x: x[1], reverse=True)
+        ranked_chunks = [chunk for chunk, score in scored_chunks]
+    else:
+        ranked_chunks = broad_chunks # Fallback to vector order
+
+    # 3. GraphRAG Expansion
+    # Find dependencies of the top 3 files and add them to context
+    try:
+        from services.graph import get_related_files
+        # Extract unique paths from top 3 chunks
+        top_paths = list(set([c.path for c in ranked_chunks[:3]]))
+        
+        related_paths = set()
+        for path in top_paths:
+             # We need repo_path. Chunk doesn't store absolute repo path, only relative.
+             # We need to guess or pass it. 
+             # 'retrieve' doesn't receive repo_path.
+             # Ideally index should store it or we pass it.
+             # Limitation: We can't easily call get_related_files without absolute repo_path.
+             # WORKAROUND: Skip for now OR modify signature. 
+             # Actually, retrieval is usually called with an index loaded from disk. 
+             # The index object doesn't know the absolute path on disk necessarily if loaded from cache.
+             pass
+             
+        # WAIT: retrieval.py's load_index logic uses cache_dir.
+        # But we need the ACTUAL source repo path to parse imports for the graph service.
+        # If the user hasn't ingested/cloned, we can't parse imports.
+        # Assuming ingestion happened, the files are there.
+        # I will rely on the fact that if we have an index, we *likely* know the repo path or can request it.
+        # Let's change 'retrieve' signature to accept 'repo_path' optional.
+    except ImportError:
+        pass
+
+    graph_chunks = []
+    if repo_path:
+        try:
+            from services.graph import get_related_files
+            # Extract unique paths from top 3 chunks
+            top_paths = list(set([c.path for c in ranked_chunks[:3]]))
+            
+            related_paths = set()
+            for path in top_paths:
+                 neighbors = get_related_files(repo_path, path)
+                 related_paths.update(neighbors)
+            
+            # Find chunks matching related paths (that aren't already in ranked)
+            rank_paths = set(c.path for c in ranked_chunks)
+            for chunk in index.chunks:
+                if chunk.path in related_paths and chunk.path not in rank_paths:
+                    graph_chunks.append(chunk)
+                    
+            # Prioritize Graph chunks? Or append them?
+            # Strategy: Append them after the top 10 re-ranked, but before the tail.
+            # For simplicity: Append them at the end of the priority queue
+            # But duplicate check is essential.
+        except Exception as e:
+            print(f"GraphRAG Error: {e}")
+            
+    # Combine lists: Re-Ranked + Graph Neighbors
+    # Deduplicate by object identity or path+start_line
+    seen = set()
+    final_unique_chunks = []
+    
+    for c in ranked_chunks + graph_chunks:
+        uid = f"{c.path}:{c.start_line}"
+        if uid not in seen:
+            seen.add(uid)
+            final_unique_chunks.append(c)
+
+    # 4. Token Budget Packing
+    packed_chunks = []
+    current_tokens = 0
+    
+    for chunk in final_unique_chunks:
+        chunk_cost = _count_tokens(chunk.text) + 20 # Buffer for XML tags
+        if current_tokens + chunk_cost <= max_tokens:
+            packed_chunks.append(chunk)
+            current_tokens += chunk_cost
+        else:
+            break
+            
+    return packed_chunks
 
 
 def format_chunks(chunks: list[Chunk]) -> str:
@@ -137,6 +284,7 @@ def format_chunks(chunks: list[Chunk]) -> str:
             "</FILE>"
         )
     return "\n\n".join(formatted)
+
 
 
 def _cache_dir(repo_path: str) -> Path:

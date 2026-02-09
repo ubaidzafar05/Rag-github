@@ -30,9 +30,9 @@ app.add_middleware(
 )
 
 # Services Startup Checks
-from services.chat import GENAI_API_KEY
-if not GENAI_API_KEY:
-    print("WARNING: GENAI_API_KEY is not set. Chat will not function.")
+from services.chat import GROQ_API_KEY
+if not GROQ_API_KEY:
+    print("WARNING: GROQ_API_KEY is not set. Chat will not function.")
 
 from services.retrieval import chromadb
 if chromadb:
